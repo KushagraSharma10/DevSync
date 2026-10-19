@@ -1,1 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400..800&family=Syne:wght@400..800&display=swap");
 @import "tailwindcss";
+
+:root {
+  --bg: #0a0d14;
+  --bg-elevated: #121826;
+  --bg-soft: #182232;
+  --border: #243044;
+  --text: #e6edf7;
+  --text-muted: #8a96a8;
+  --accent: #4c8dff;
+  --accent-dim: #2f6fe0;
+  --danger: #ff6b7a;
+  --warning: #e6c07b;
+  --font-brand: "Syne", sans-serif;
+  --font-body: "Plus Jakarta Sans", sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+}
+
+.brand {
+  font-family: var(--font-brand);
+}
+
+.auth-bg {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(
+      ellipse 55% 45% at 50% 48%,
+      rgba(76, 141, 255, 0.1),
+      transparent 65%
+    ),
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent 71px,
+      rgba(76, 141, 255, 0.035) 71px,
+      rgba(76, 141, 255, 0.035) 72px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 71px,
+      rgba(76, 141, 255, 0.035) 71px,
+      rgba(76, 141, 255, 0.035) 72px
+    );
+}
