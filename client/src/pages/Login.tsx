@@ -68,7 +68,7 @@ const Login = () => {
 
           <p className="mt-6 text-center text-sm text-(--text-muted)">
             New to DevSync?{' '}
-            <Link to="/register" className="text-(--accent) hover:underline">
+            <Link to="/register" className="text-(--accent)">
               Create account
             </Link>
           </p>
