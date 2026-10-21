@@ -17,7 +17,7 @@ Pair with a teammate, join with a room code, and code together without juggling 
 | Layer | Stack |
 |-------|--------|
 | Frontend | React (Vite), TypeScript, Tailwind CSS, Zustand, Monaco |
-| Backend (later) | Node.js, Express, TypeScript, Socket.IO |
+| Backend (later) | Node.js, Express, JavaScript, Socket.IO |
 | Database (later) | MongoDB (Mongoose) |
 | Auth (later) | JWT + bcrypt |
 
