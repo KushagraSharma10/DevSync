@@ -29,3 +29,31 @@ export async function register(req, res, next) {
     next(error)
   }
 }
+
+export async function login(req, res, next) {
+  try {
+    const email = readString(req.body?.email)
+    const password = readString(req.body?.password)
+
+    if (!email.trim()) throw new AppError('Email is required.', 400)
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      throw new AppError('Enter a valid email address.', 400)
+    }
+    if (!password) throw new AppError('Password is required.', 400)
+
+    const result = await authService.loginUser({ email, password })
+    res.status(200).json(result)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function me(req, res, next) {
+  try {
+    if (!req.userId) throw new AppError('Authentication required.', 401)
+    const user = await authService.getCurrentUser(req.userId)
+    res.status(200).json({ user })
+  } catch (error) {
+    next(error)
+  }
+}
