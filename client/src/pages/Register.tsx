@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AuthInput } from '../components/AuthInput'
 import { AuthLayout } from '../components/AuthLayout'
+import { ApiError } from '../lib/api'
+import { useAuthStore } from '../stores/authStore'
 
 type RegisterErrors = {
   name?: string
@@ -13,11 +15,16 @@ type RegisterErrors = {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const Register = () => {
+  const navigate = useNavigate()
+  const register = useAuthStore((state) => state.register)
+
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [errors, setErrors] = useState<RegisterErrors>({})
+  const [formError, setFormError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handlePasswordChange = (value: string) => {
     setPassword(value)
@@ -27,14 +34,16 @@ const Register = () => {
       password: undefined,
       confirmPassword: undefined,
     }))
+    setFormError('')
   }
 
   const handleConfirmPasswordChange = (value: string) => {
     setConfirmPassword(value)
     setErrors((prev) => ({ ...prev, confirmPassword: undefined }))
+    setFormError('')
   }
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
 
     const nextErrors: RegisterErrors = {}
@@ -61,9 +70,29 @@ const Register = () => {
       nextErrors.confirmPassword = 'Passwords do not match.'
     }
 
-    setErrors(nextErrors)
-    // UI-only slice: on success the errors clear and the form stays put.
-    // Account creation + navigation arrive with the Auth API wiring.
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors)
+      return
+    }
+
+    setIsSubmitting(true)
+    setFormError('')
+    try {
+      await register(name.trim(), email.trim(), password)
+      navigate('/dashboard')
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        setErrors({ email: error.message })
+      } else if (error instanceof ApiError && error.status === 400) {
+        setFormError(error.message)
+      } else if (error instanceof ApiError) {
+        setFormError(error.message)
+      } else {
+        setFormError('Something went wrong. Please try again.')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -91,6 +120,7 @@ const Register = () => {
           onChange={(value) => {
             setName(value)
             setErrors((prev) => ({ ...prev, name: undefined }))
+            setFormError('')
           }}
           error={errors.name}
         />
@@ -105,6 +135,7 @@ const Register = () => {
           onChange={(value) => {
             setEmail(value)
             setErrors((prev) => ({ ...prev, email: undefined }))
+            setFormError('')
           }}
           error={errors.email}
         />
@@ -132,11 +163,17 @@ const Register = () => {
           onChange={handleConfirmPasswordChange}
           error={errors.confirmPassword}
         />
+        {formError ? (
+          <p role="alert" className="text-[13px] text-(--danger)">
+            {formError}
+          </p>
+        ) : null}
         <button
           type="submit"
-          className="w-full rounded-lg bg-(--accent) py-3 text-sm font-semibold text-(--bg) hover:bg-(--accent-dim)"
+          disabled={isSubmitting}
+          className="w-full rounded-lg bg-(--accent) py-3 text-sm font-semibold text-(--bg) hover:bg-(--accent-dim) disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Create account
+          {isSubmitting ? 'Creating account…' : 'Create account'}
         </button>
       </form>
     </AuthLayout>
