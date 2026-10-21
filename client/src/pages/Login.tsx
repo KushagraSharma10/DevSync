@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AuthInput } from '../components/AuthInput'
 import { AuthLayout } from '../components/AuthLayout'
+import { ApiError } from '../lib/api'
+import { useAuthStore } from '../stores/authStore'
 
 type LoginErrors = {
   email?: string
@@ -11,23 +13,30 @@ type LoginErrors = {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const Login = () => {
+  const navigate = useNavigate()
+  const login = useAuthStore((state) => state.login)
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [errors, setErrors] = useState<LoginErrors>({})
+  const [formError, setFormError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleEmailChange = (value: string) => {
     setEmail(value)
     // Credential error belongs to the email+password pair, so editing
     // either field clears the stale "incorrect" message.
     setErrors((prev) => ({ ...prev, email: undefined, password: undefined }))
+    setFormError('')
   }
 
   const handlePasswordChange = (value: string) => {
     setPassword(value)
     setErrors((prev) => ({ ...prev, password: undefined }))
+    setFormError('')
   }
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
 
     const nextErrors: LoginErrors = {}
@@ -47,11 +56,25 @@ const Login = () => {
       return
     }
 
-    // UI-only slice: there is no auth API yet, so a well-formed submit
-    // shows the design's failed sign-in state (PDF frame 1). When the
-    // Auth API lands, this becomes the real 401 response and a success
-    // will navigate to the dashboard instead.
-    setErrors({ password: 'Incorrect email or password. Try again.' })
+    setIsSubmitting(true)
+    setFormError('')
+    try {
+      await login(email.trim(), password)
+      navigate('/dashboard')
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        // Real failed sign-in from the API (PDF frame 1 state)
+        setErrors({ password: error.message })
+      } else if (error instanceof ApiError && error.status === 400) {
+        setErrors({ password: error.message })
+      } else if (error instanceof ApiError) {
+        setFormError(error.message)
+      } else {
+        setFormError('Something went wrong. Please try again.')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -100,11 +123,17 @@ const Login = () => {
           onChange={handlePasswordChange}
           error={errors.password}
         />
+        {formError ? (
+          <p role="alert" className="text-[13px] text-(--danger)">
+            {formError}
+          </p>
+        ) : null}
         <button
           type="submit"
-          className="w-full rounded-lg bg-(--accent) py-3 text-sm font-semibold text-(--bg) hover:bg-(--accent-dim)"
+          disabled={isSubmitting}
+          className="w-full rounded-lg bg-(--accent) py-3 text-sm font-semibold text-(--bg) hover:bg-(--accent-dim) disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Sign in
+          {isSubmitting ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
     </AuthLayout>
