@@ -1,8 +1,59 @@
+import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { AuthInput } from '../components/AuthInput'
 import { AuthLayout } from '../components/AuthLayout'
 
+type LoginErrors = {
+  email?: string
+  password?: string
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 const Login = () => {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [errors, setErrors] = useState<LoginErrors>({})
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value)
+    // Credential error belongs to the email+password pair, so editing
+    // either field clears the stale "incorrect" message.
+    setErrors((prev) => ({ ...prev, email: undefined, password: undefined }))
+  }
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value)
+    setErrors((prev) => ({ ...prev, password: undefined }))
+  }
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault()
+
+    const nextErrors: LoginErrors = {}
+
+    if (!email.trim()) {
+      nextErrors.email = 'Email is required.'
+    } else if (!EMAIL_PATTERN.test(email.trim())) {
+      nextErrors.email = 'Enter a valid email address.'
+    }
+
+    if (!password) {
+      nextErrors.password = 'Password is required.'
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors)
+      return
+    }
+
+    // UI-only slice: there is no auth API yet, so a well-formed submit
+    // shows the design's failed sign-in state (PDF frame 1). When the
+    // Auth API lands, this becomes the real 401 response and a success
+    // will navigate to the dashboard instead.
+    setErrors({ password: 'Incorrect email or password. Try again.' })
+  }
+
   return (
     <AuthLayout
       tagline="Code together in realtime rooms."
@@ -25,10 +76,7 @@ const Login = () => {
         </>
       }
     >
-      <form
-        className="flex flex-col gap-5"
-        onSubmit={(event) => event.preventDefault()}
-      >
+      <form className="flex flex-col gap-5" onSubmit={handleSubmit} noValidate>
         <AuthInput
           id="email"
           name="email"
@@ -36,6 +84,9 @@ const Login = () => {
           type="email"
           placeholder="you@company.com"
           autoComplete="email"
+          value={email}
+          onChange={handleEmailChange}
+          error={errors.email}
         />
         <AuthInput
           id="password"
@@ -45,6 +96,9 @@ const Login = () => {
           placeholder="Password"
           autoComplete="current-password"
           showPasswordToggle
+          value={password}
+          onChange={handlePasswordChange}
+          error={errors.password}
         />
         <button
           type="submit"
