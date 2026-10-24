@@ -2,6 +2,7 @@ import cors from 'cors'
 import express from 'express'
 import { env } from './config/env.js'
 import authRoutes from './routes/authRoutes.js'
+import roomRoutes from './routes/roomRoutes.js'
 import { errorHandler, notFound } from './middleware/errorMiddleware.js'
 
 const app = express()
@@ -33,6 +34,7 @@ app.get('/health', (_req, res) => {
 })
 
 app.use('/api/auth', authRoutes)
+app.use('/api/rooms', roomRoutes)
 
 app.use(notFound)
 app.use(errorHandler)
