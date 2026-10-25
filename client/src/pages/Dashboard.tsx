@@ -154,12 +154,12 @@ const Dashboard = () => {
                   aria-invalid={createError ? true : undefined}
                   autoFocus
                   disabled={isCreateSubmitting}
-                  className="min-w-0 flex-1 rounded-lg border border-(--border) bg-(--bg) px-4 py-2.5 text-sm outline-none placeholder:text-(--text-muted) focus:border-(--accent) disabled:opacity-60 aria-invalid:border-(--danger)"
+                  className="min-w-0 flex-1 rounded-lg border border-(--border) bg-(--bg-elevated) px-4 py-2.5 text-sm outline-none placeholder:text-(--text-muted) focus:border-(--accent) disabled:opacity-60 aria-invalid:border-(--danger)"
                 />
                 <button
                   type="submit"
                   disabled={isCreateSubmitting}
-                  className="shrink-0 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--bg) hover:bg-(--accent-dim) disabled:opacity-60"
+                  className="shrink-0 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--on-accent) hover:bg-(--accent-dim) disabled:opacity-60"
                 >
                   {isCreateSubmitting ? 'Creating…' : 'Create'}
                 </button>
@@ -182,7 +182,7 @@ const Dashboard = () => {
             <button
               type="button"
               onClick={handleStartCreate}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--bg) hover:bg-(--accent-dim)"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--on-accent) hover:bg-(--accent-dim)"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -216,12 +216,12 @@ const Dashboard = () => {
                 aria-label="Room code"
                 aria-invalid={joinError ? true : undefined}
                 disabled={isJoinSubmitting}
-                className="min-w-0 flex-1 rounded-lg border border-(--border) bg-(--bg) px-4 py-2.5 text-sm outline-none placeholder:text-(--text-muted) focus:border-(--accent) disabled:opacity-60 aria-invalid:border-(--danger)"
+                className="min-w-0 flex-1 rounded-lg border border-(--border) bg-(--bg-elevated) px-4 py-2.5 text-sm outline-none placeholder:text-(--text-muted) focus:border-(--accent) disabled:opacity-60 aria-invalid:border-(--danger)"
               />
               <button
                 type="submit"
                 disabled={isJoinSubmitting}
-                className="shrink-0 rounded-lg border border-(--border) bg-(--bg-elevated) px-4 py-2.5 text-sm font-medium text-(--text) hover:border-(--accent) disabled:opacity-60"
+                className="shrink-0 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--on-accent) hover:bg-(--accent-dim) disabled:opacity-60"
               >
                 {isJoinSubmitting ? 'Joining…' : 'Join'}
               </button>

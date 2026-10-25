@@ -1,4 +1,5 @@
 import Editor, { type BeforeMount, type OnMount } from '@monaco-editor/react'
+import { useUiStore } from '../stores/uiStore'
 
 type CodeEditorProps = {
   value: string
@@ -41,9 +42,47 @@ const handleBeforeMount: BeforeMount = (monaco) => {
       'scrollbarSlider.activeBackground': '#243044DD',
     },
   })
+
+  monaco.editor.defineTheme('devsync-light', {
+    base: 'vs',
+    inherit: true,
+    rules: [
+      { token: 'comment', foreground: '6B7A90', fontStyle: 'italic' },
+      { token: 'keyword', foreground: '1E5BBF' },
+      { token: 'number', foreground: 'B45309' },
+      { token: 'string', foreground: '047857' },
+      { token: 'type', foreground: '1E5BBF' },
+      { token: 'identifier', foreground: '0F172A' },
+      { token: 'delimiter', foreground: '64748B' },
+      { token: 'function', foreground: '1D4ED8' },
+      { token: 'member', foreground: '0F172A' },
+      { token: 'variable', foreground: '0F172A' },
+    ],
+    colors: {
+      'editor.background': '#FFFFFF',
+      'editor.foreground': '#0F172A',
+      'editorGutter.background': '#FFFFFF',
+      'editorLineNumber.foreground': '#94A3B8',
+      'editorLineNumber.activeForeground': '#64748B',
+      'editor.lineHighlightBackground': '#F0F4FA88',
+      'editor.lineHighlightBorder': '#00000000',
+      'editorCursor.foreground': '#2F6FE0',
+      'editor.selectionBackground': '#2F6FE028',
+      'editor.inactiveSelectionBackground': '#2F6FE018',
+      'editor.selectionHighlightBackground': '#2F6FE018',
+      'editorWidget.background': '#FFFFFF',
+      'editorWidget.border': '#D5DEE9',
+      'scrollbarSlider.background': '#D5DEE988',
+      'scrollbarSlider.hoverBackground': '#D5DEE9BB',
+      'scrollbarSlider.activeBackground': '#D5DEE9DD',
+    },
+  })
 }
 
 export function CodeEditor({ value, onChange, onCursorChange }: CodeEditorProps) {
+  const theme = useUiStore((state) => state.theme)
+  const monacoTheme = theme === 'light' ? 'devsync-light' : 'devsync-dark'
+
   const handleMount: OnMount = (editor) => {
     editor.setPosition({ lineNumber: 1, column: 1 })
     editor.focus()
@@ -58,7 +97,7 @@ export function CodeEditor({ value, onChange, onCursorChange }: CodeEditorProps)
     <Editor
       height="100%"
       language="javascript"
-      theme="devsync-dark"
+      theme={monacoTheme}
       value={value}
       beforeMount={handleBeforeMount}
       onMount={handleMount}
