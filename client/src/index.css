@@ -132,6 +132,96 @@ html.theme-transition *::after {
   animation: copy-spark-burst 0.5s ease-out 0.32s both;
 }
 
+/* Motion — state changes only; disabled under prefers-reduced-motion */
+@keyframes ds-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ds-enter-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ds-banner {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ds-page {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.anim-enter {
+  animation: ds-enter 0.22s ease-out both;
+  animation-delay: var(--anim-delay, 0ms);
+}
+
+.anim-enter-pop {
+  animation: ds-enter-pop 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-banner {
+  animation: ds-banner 0.28s ease-out both;
+}
+
+.anim-page {
+  animation: ds-page 0.35s ease-out both;
+}
+
+.btn-press {
+  transition: transform 0.12s ease;
+}
+
+.btn-press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-enter,
+  .anim-enter-pop,
+  .anim-banner,
+  .anim-page,
+  .copy-success-icon .copy-circle,
+  .copy-success-icon .copy-check,
+  .copy-success-icon .copy-spark {
+    animation: none !important;
+  }
+
+  .btn-press {
+    transition: none;
+  }
+
+  .btn-press:active:not(:disabled) {
+    transform: none;
+  }
+}
+
 .brand {
   font-family: var(--font-brand);
 }

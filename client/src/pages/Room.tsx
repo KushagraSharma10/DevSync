@@ -140,14 +140,14 @@ const Room = () => {
       />
 
       {connectionStatus === 'reconnecting' ? (
-        <div className="border-b border-(--border) bg-(--bg-elevated) px-4 py-2 text-center text-sm text-(--text-muted)">
+        <div className="anim-banner border-b border-(--border) bg-(--bg-elevated) px-4 py-2 text-center text-sm text-(--text-muted)">
           Connection lost — reconnecting…
         </div>
       ) : null}
 
       {socketError ? (
         <div
-          className="border-b border-(--border) bg-(--bg-elevated) px-4 py-2 text-center text-sm text-(--danger)"
+          className="anim-banner border-b border-(--border) bg-(--bg-elevated) px-4 py-2 text-center text-sm text-(--danger)"
           role="alert"
         >
           {socketError}

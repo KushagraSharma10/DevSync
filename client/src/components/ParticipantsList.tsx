@@ -16,7 +16,7 @@ export function ParticipantsList({
         {participants.map((participant) => (
           <span
             key={participant.id}
-            className="inline-flex shrink-0 items-center gap-2 rounded-full border border-(--border) bg-(--bg) py-1.5 pr-3 pl-1.5 text-sm whitespace-nowrap text-(--text)"
+            className="anim-enter-pop inline-flex shrink-0 items-center gap-2 rounded-full border border-(--border) bg-(--bg) py-1.5 pr-3 pl-1.5 text-sm whitespace-nowrap text-(--text)"
           >
             <UserAvatar name={participant.name} size="sm" />
             {participant.name}
@@ -36,7 +36,7 @@ export function ParticipantsList({
       {participants.map((participant) => (
         <li
           key={participant.id}
-          className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-(--bg-soft)"
+          className="anim-enter flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-(--bg-soft)"
         >
           <UserAvatar name={participant.name} showOnline />
           <span className="min-w-0 flex-1">

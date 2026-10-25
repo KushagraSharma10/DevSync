@@ -16,7 +16,7 @@ export function RoomListItem({ room }: RoomListItemProps) {
       </span>
       <Link
         to={`/room/${room.code}`}
-        className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-(--border) bg-transparent px-4 text-sm font-medium text-(--text) hover:border-(--accent)"
+        className="btn-press inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-(--border) bg-transparent px-4 text-sm font-medium text-(--text) transition-[border-color,transform] hover:border-(--accent) hover:-translate-y-px"
       >
         Open
       </Link>

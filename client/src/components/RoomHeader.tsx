@@ -165,7 +165,7 @@ export function RoomHeader({
           {participants.map((participant) => (
             <span
               key={participant.id}
-              className="rounded-full ring-2 ring-(--bg-header)"
+              className="anim-enter-pop rounded-full ring-2 ring-(--bg-header)"
               title={participant.name}
             >
               <UserAvatar name={participant.name} />
@@ -181,8 +181,8 @@ export function RoomHeader({
         <ThemeToggle />
         <Link
           to="/dashboard"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-(--danger) px-3 py-1.5 text-[13px] font-semibold text-white hover:opacity-90"
-        >
+        className="btn-press inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-(--danger) px-3 py-1.5 text-[13px] font-semibold text-white hover:opacity-90"
+      >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"

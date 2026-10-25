@@ -19,12 +19,22 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [draft, setDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
+  const seededRef = useRef(false)
+  const seenIdsRef = useRef(new Set<string>())
+  const animateIdsRef = useRef(new Set<string>())
 
   useEffect(() => {
     const el = listRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
   }, [messages.length])
+
+  useEffect(() => {
+    for (const message of messages) {
+      seenIdsRef.current.add(message.id)
+    }
+    seededRef.current = true
+  }, [messages])
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
@@ -56,9 +66,19 @@ export function ChatPanel({
               const isYou = Boolean(
                 currentUserId && message.authorId === currentUserId,
               )
+              if (
+                seededRef.current &&
+                !seenIdsRef.current.has(message.id)
+              ) {
+                animateIdsRef.current.add(message.id)
+              }
+              const animateIn = animateIdsRef.current.has(message.id)
 
               return (
-                <li key={message.id} className="flex gap-2.5">
+                <li
+                  key={message.id}
+                  className={`flex gap-2.5 ${animateIn ? 'anim-enter' : ''}`}
+                >
                   <UserAvatar name={isYou ? 'You' : message.author} />
                   <div className="min-w-0 flex-1">
                     <p className="text-[13px]">
@@ -102,7 +122,7 @@ export function ChatPanel({
           type="submit"
           aria-label="Send message"
           disabled={disabled}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-(--border) bg-(--bg) text-(--accent) hover:border-(--accent) disabled:opacity-60"
+          className="btn-press flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-(--border) bg-(--bg) text-(--accent) hover:border-(--accent) disabled:opacity-60"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
