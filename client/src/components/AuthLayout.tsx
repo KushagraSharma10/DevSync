@@ -17,7 +17,7 @@ export function AuthLayout({
 }: AuthLayoutProps) {
   return (
     <div className="auth-bg flex min-h-screen items-center justify-center px-4 py-10 text-(--text)">
-      <div className="w-full max-w-md">
+      <div className="anim-page w-full max-w-md">
         <div className="text-center">
           <h1 className="brand text-5xl font-bold tracking-wide">DevSync</h1>
           <p className="mt-2 text-base text-(--text-muted)">{tagline}</p>

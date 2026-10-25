@@ -132,7 +132,7 @@ const Dashboard = () => {
     <div className="app-bg min-h-screen text-(--text)">
       <AppHeader />
 
-      <main className="mx-auto w-full max-w-4xl px-6 pt-12 pb-10">
+      <main className="anim-page mx-auto w-full max-w-4xl px-6 pt-12 pb-10">
         <h2 className="text-3xl font-semibold tracking-tight">Your rooms</h2>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -159,7 +159,7 @@ const Dashboard = () => {
                 <button
                   type="submit"
                   disabled={isCreateSubmitting}
-                  className="shrink-0 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--on-accent) hover:bg-(--accent-dim) disabled:opacity-60"
+                  className="btn-press shrink-0 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--on-accent) hover:bg-(--accent-dim) disabled:opacity-60"
                 >
                   {isCreateSubmitting ? 'Creating…' : 'Create'}
                 </button>
@@ -167,13 +167,13 @@ const Dashboard = () => {
                   type="button"
                   onClick={handleCancelCreate}
                   disabled={isCreateSubmitting}
-                  className="shrink-0 rounded-lg border border-(--border) bg-(--bg-elevated) px-3 py-2.5 text-sm font-medium text-(--text-muted) hover:border-(--accent) hover:text-(--text) disabled:opacity-60"
+                  className="btn-press shrink-0 rounded-lg border border-(--border) bg-(--bg-elevated) px-3 py-2.5 text-sm font-medium text-(--text-muted) hover:border-(--accent) hover:text-(--text) disabled:opacity-60"
                 >
                   Cancel
                 </button>
               </div>
               {createError ? (
-                <p className="text-sm text-(--danger)" role="alert">
+                <p className="anim-banner text-sm text-(--danger)" role="alert">
                   {createError}
                 </p>
               ) : null}
@@ -182,7 +182,7 @@ const Dashboard = () => {
             <button
               type="button"
               onClick={handleStartCreate}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--on-accent) hover:bg-(--accent-dim)"
+              className="btn-press inline-flex items-center justify-center gap-2 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--on-accent) hover:bg-(--accent-dim)"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -221,13 +221,13 @@ const Dashboard = () => {
               <button
                 type="submit"
                 disabled={isJoinSubmitting}
-                className="shrink-0 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--on-accent) hover:bg-(--accent-dim) disabled:opacity-60"
+                className="btn-press shrink-0 rounded-lg bg-(--accent) px-4 py-2.5 text-sm font-semibold text-(--on-accent) hover:bg-(--accent-dim) disabled:opacity-60"
               >
                 {isJoinSubmitting ? 'Joining…' : 'Join'}
               </button>
             </div>
             {joinError ? (
-              <p className="text-sm text-(--danger)" role="alert">
+              <p className="anim-banner text-sm text-(--danger)" role="alert">
                 {joinError}
               </p>
             ) : null}
@@ -271,8 +271,14 @@ const Dashboard = () => {
               </div>
             ) : (
               <ul className="divide-y divide-(--border)/50">
-                {rooms.map((room) => (
-                  <li key={room.id}>
+                {rooms.map((room, index) => (
+                  <li
+                    key={room.id}
+                    className="anim-enter"
+                    style={{
+                      ['--anim-delay' as string]: `${Math.min(index, 6) * 40}ms`,
+                    }}
+                  >
                     <RoomListItem room={room} />
                   </li>
                 ))}
