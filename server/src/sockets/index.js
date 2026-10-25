@@ -2,6 +2,13 @@ import { User } from '../models/User.js'
 import { Room } from '../models/Room.js'
 import { verifyToken } from '../utils/token.js'
 import {
+  ensureCode,
+  flushPersist,
+  getCode,
+  schedulePersist,
+  setCode,
+} from './codeStore.js'
+import {
   addMember,
   listParticipants,
   removeMember,
@@ -21,11 +28,11 @@ function broadcastPresence(io, roomCode) {
 
 /**
  * Attach Socket.IO handlers.
- * Auth: client sends JWT in handshake.auth.token (same token as REST).
- * RT1 events: room:join, room:leave, presence:update (server → client).
+ * Auth: JWT in handshake.auth.token
+ * RT1: room:join / leave / presence:update
+ * RT2: code:update / code:request_sync / code:sync (+ savedCode debounce persist)
  */
 export function registerSockets(io) {
-  // Runs once per connection attempt — reject before "connection" if bad JWT.
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth?.token
@@ -62,11 +69,13 @@ export function registerSockets(io) {
 
         const room = await Room.findOne({ code })
         if (!room) {
-          reply({ ok: false, message: 'Room not found. Check the code and try again.' })
+          reply({
+            ok: false,
+            message: 'Room not found. Check the code and try again.',
+          })
           return
         }
 
-        // Socket.IO "room" = broadcast group named by our join code
         await socket.join(code)
         addMember(code, socket.id, {
           userId: socket.data.userId,
@@ -74,10 +83,14 @@ export function registerSockets(io) {
         })
         socket.data.roomCode = code
 
+        // Live snapshot: memory first, else seed from Mongo savedCode
+        const content = ensureCode(code, room.savedCode)
+
         broadcastPresence(io, code)
         reply({
           ok: true,
           participants: listParticipants(code),
+          content,
         })
       } catch (error) {
         console.error('room:join failed:', error)
@@ -99,13 +112,46 @@ export function registerSockets(io) {
         socket.data.roomCode = undefined
       }
       broadcastPresence(io, code)
+      void flushPersist(code)
       reply({ ok: true })
+    })
+
+    // Last-Write-Wins: latest content overwrites; relay to everyone else in the room
+    socket.on('code:update', (payload) => {
+      const roomCode = socket.data.roomCode
+      if (!roomCode) return
+
+      const next = setCode(roomCode, payload?.content)
+      if (next === null) return
+
+      socket.to(roomCode).emit('code:update', { content: next })
+      schedulePersist(roomCode)
+    })
+
+    // Late joiner / reconnect: ask server for full snapshot
+    socket.on('code:request_sync', (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : () => {}
+      const roomCode = readCode(payload) || socket.data.roomCode
+      if (!roomCode) {
+        reply({ ok: false, message: 'Not in a room.' })
+        return
+      }
+
+      const content = getCode(roomCode)
+      if (content === null) {
+        reply({ ok: false, message: 'No code snapshot yet.' })
+        return
+      }
+
+      reply({ ok: true, content })
+      socket.emit('code:sync', { content })
     })
 
     socket.on('disconnect', () => {
       const leftCodes = removeSocketFromAll(socket.id)
       for (const code of leftCodes) {
         broadcastPresence(io, code)
+        void flushPersist(code)
       }
     })
   })
