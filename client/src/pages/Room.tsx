@@ -9,6 +9,7 @@ import {
   mockRoom,
   type MockChatMessage,
 } from '../data/mockRoom'
+import { useRoomSocket } from '../hooks/useRoomSocket'
 import { ApiError, roomsApi } from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
 
@@ -16,6 +17,7 @@ const Room = () => {
   const { code } = useParams<{ code: string }>()
   const roomCode = (code ?? '').toUpperCase()
   const token = useAuthStore((state) => state.token)
+  const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
 
   const canLoadRoom = Boolean(token && roomCode)
@@ -31,6 +33,14 @@ const Room = () => {
   const [cursor, setCursor] = useState({ line: 12, column: 23 })
   const [messages, setMessages] = useState<MockChatMessage[]>(mockRoom.messages)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
+
+  const roomReady = !isLoadingRoom && !roomError
+  const { participants, isConnected, socketError } = useRoomSocket({
+    roomCode,
+    token,
+    currentUserId: user?.id ?? null,
+    enabled: roomReady,
+  })
 
   useEffect(() => {
     if (!token || !roomCode) return
@@ -111,8 +121,18 @@ const Room = () => {
       <RoomHeader
         roomName={roomName}
         roomCode={roomCode}
-        participants={mockRoom.participants}
+        participants={participants}
+        isLive={isConnected}
       />
+
+      {socketError ? (
+        <div
+          className="border-b border-(--border) bg-(--bg-elevated) px-4 py-2 text-center text-sm text-(--danger)"
+          role="alert"
+        >
+          {socketError}
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Editor + status bar */}
@@ -140,11 +160,19 @@ const Room = () => {
                 Participants
               </h2>
               <span className="text-xs text-(--text-muted)">
-                {mockRoom.participants.length}
+                {participants.length}
               </span>
             </div>
             <div className="mt-3.5">
-              <ParticipantsList participants={mockRoom.participants} />
+              {participants.length === 0 ? (
+                <p className="text-sm text-(--text-muted)">
+                  {isConnected
+                    ? 'Waiting for people to join…'
+                    : 'Connecting to live presence…'}
+                </p>
+              ) : (
+                <ParticipantsList participants={participants} />
+              )}
             </div>
           </div>
 
@@ -172,14 +200,22 @@ const Room = () => {
                     Participants
                   </h2>
                   <span className="text-xs text-(--text-muted)">
-                    {mockRoom.participants.length}
+                    {participants.length}
                   </span>
                 </div>
                 <div className="mt-3">
-                  <ParticipantsList
-                    participants={mockRoom.participants}
-                    variant="chips"
-                  />
+                  {participants.length === 0 ? (
+                    <p className="text-sm text-(--text-muted)">
+                      {isConnected
+                        ? 'Waiting for people to join…'
+                        : 'Connecting to live presence…'}
+                    </p>
+                  ) : (
+                    <ParticipantsList
+                      participants={participants}
+                      variant="chips"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -211,7 +247,7 @@ const Room = () => {
                 </span>
                 <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border border-(--border) bg-(--bg) px-3 py-1.5 text-xs font-medium text-(--text)">
                   <span className="h-1.5 w-1.5 rounded-full bg-(--accent)" />
-                  {mockRoom.participants.length} online
+                  {participants.length} online
                 </span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
