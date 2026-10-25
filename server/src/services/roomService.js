@@ -91,7 +91,7 @@ export async function getRoomByCode({ userId, code }) {
   await RoomMember.findOneAndUpdate(
     { roomId: room.id, userId },
     { $set: { joinedAt: new Date() } },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
   )
 
   return toPublicRoom(room, { includeSavedCode: true })

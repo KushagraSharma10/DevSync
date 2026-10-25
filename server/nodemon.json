@@ -1,0 +1,7 @@
+{
+  "watch": ["src"],
+  "ext": "js,json",
+  "ignore": ["node_modules"],
+  "signal": "SIGTERM",
+  "delay": 500
+}
