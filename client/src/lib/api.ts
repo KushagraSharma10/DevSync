@@ -1,4 +1,5 @@
 import type { AuthResponse, PublicUser } from '../types/auth'
+import type { Room } from '../types/room'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5000'
 
@@ -61,4 +62,19 @@ export const authApi = {
     apiFetch<AuthResponse>('/api/auth/login', { method: 'POST', body: input }),
   me: (token: string) =>
     apiFetch<{ user: PublicUser }>('/api/auth/me', { token }),
+}
+
+export const roomsApi = {
+  list: (token: string) =>
+    apiFetch<{ rooms: Room[] }>('/api/rooms', { token }),
+  create: (token: string, input: { name: string }) =>
+    apiFetch<{ room: Room }>('/api/rooms', {
+      method: 'POST',
+      body: input,
+      token,
+    }),
+  getByCode: (token: string, code: string) =>
+    apiFetch<{ room: Room }>(`/api/rooms/${encodeURIComponent(code)}`, {
+      token,
+    }),
 }
