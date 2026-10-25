@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import type { MockRoom } from '../data/mockRooms'
+import type { Room } from '../types/room'
 
 type RoomListItemProps = {
-  room: MockRoom
+  room: Room
 }
 
 export function RoomListItem({ room }: RoomListItemProps) {

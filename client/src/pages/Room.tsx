@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import { ChatPanel } from '../components/ChatPanel'
 import { CodeEditor } from '../components/CodeEditor'
 import { ParticipantsList } from '../components/ParticipantsList'
@@ -9,19 +9,67 @@ import {
   mockRoom,
   type MockChatMessage,
 } from '../data/mockRoom'
-import { mockRooms } from '../data/mockRooms'
+import { ApiError, roomsApi } from '../lib/api'
+import { useAuthStore } from '../stores/authStore'
 
 const Room = () => {
   const { code } = useParams<{ code: string }>()
-  const roomCode = (code ?? 'K7P2QX').toUpperCase()
-  const roomName =
-    mockRooms.find((room) => room.code === roomCode)?.name ??
-    `Room ${roomCode}`
+  const roomCode = (code ?? '').toUpperCase()
+  const token = useAuthStore((state) => state.token)
+  const logout = useAuthStore((state) => state.logout)
+
+  const canLoadRoom = Boolean(token && roomCode)
+  const [roomName, setRoomName] = useState(
+    roomCode ? `Room ${roomCode}` : 'Room',
+  )
+  const [isLoadingRoom, setIsLoadingRoom] = useState(canLoadRoom)
+  const [roomError, setRoomError] = useState(
+    roomCode ? '' : 'Room code is missing.',
+  )
 
   const [editorCode, setEditorCode] = useState(initialCode)
   const [cursor, setCursor] = useState({ line: 12, column: 23 })
   const [messages, setMessages] = useState<MockChatMessage[]>(mockRoom.messages)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
+
+  useEffect(() => {
+    if (!token || !roomCode) return
+
+    const authToken = token
+    const codeToLoad = roomCode
+    let cancelled = false
+
+    async function loadRoom() {
+      setIsLoadingRoom(true)
+      setRoomError('')
+      try {
+        const { room } = await roomsApi.getByCode(authToken, codeToLoad)
+        if (cancelled) return
+        setRoomName(room.name)
+        if (room.savedCode) {
+          setEditorCode(room.savedCode)
+        }
+      } catch (error) {
+        if (cancelled) return
+        if (error instanceof ApiError && error.status === 401) {
+          logout()
+          return
+        }
+        setRoomError(
+          error instanceof ApiError
+            ? error.message
+            : 'Unable to load this room. Please try again.',
+        )
+      } finally {
+        if (!cancelled) setIsLoadingRoom(false)
+      }
+    }
+
+    void loadRoom()
+    return () => {
+      cancelled = true
+    }
+  }, [token, roomCode, logout])
 
   const handleSendMessage = (text: string) => {
     const now = new Date()
@@ -33,6 +81,30 @@ const Room = () => {
   }
 
   const lastMessage = messages[messages.length - 1]
+
+  if (isLoadingRoom) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-(--bg) text-(--text)">
+        <p className="text-[15px] text-(--text-muted)">Loading room…</p>
+      </div>
+    )
+  }
+
+  if (roomError) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-4 bg-(--bg) px-6 text-center text-(--text)">
+        <p className="text-[15px] text-(--danger)" role="alert">
+          {roomError}
+        </p>
+        <Link
+          to="/dashboard"
+          className="rounded-lg border border-(--border) bg-(--bg-elevated) px-4 py-2.5 text-sm font-medium text-(--text) hover:border-(--accent)"
+        >
+          Back to dashboard
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-(--bg) text-(--text)">
