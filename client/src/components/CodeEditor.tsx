@@ -45,10 +45,9 @@ const handleBeforeMount: BeforeMount = (monaco) => {
 
 export function CodeEditor({ value, onChange, onCursorChange }: CodeEditorProps) {
   const handleMount: OnMount = (editor) => {
-    editor.setPosition({ lineNumber: 12, column: 23 })
-    editor.revealLine(12)
+    editor.setPosition({ lineNumber: 1, column: 1 })
     editor.focus()
-    onCursorChange(12, 23)
+    onCursorChange(1, 1)
 
     editor.onDidChangeCursorPosition((event) => {
       onCursorChange(event.position.lineNumber, event.position.column)

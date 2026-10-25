@@ -40,20 +40,3 @@ export const mockRoom = {
     },
   ] as MockChatMessage[],
 }
-
-export const initialCode = `// Binary search over a sorted array.
-// Returns the index of target, or -1 if it is not present.
-function binarySearch(nums, target) {
-  let lo = 0;
-  let hi = nums.length - 1;
-
-  while (lo <= hi) {
-    const mid = lo + Math.floor((hi - lo) / 2);
-    if (nums[mid] === target) return mid;
-    if (nums[mid] < target) lo = mid + 1;
-    else hi = mid - 1;
-  }
-
-  return -1;
-}
-`
