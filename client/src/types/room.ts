@@ -6,3 +6,9 @@ export type Room = {
   createdAt: string
   savedCode?: string
 }
+
+export type Participant = {
+  id: string
+  name: string
+  isYou?: boolean
+}

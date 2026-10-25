@@ -1,8 +1,8 @@
-import type { MockParticipant } from '../data/mockRoom'
+import type { Participant } from '../types/room'
 import { UserAvatar } from './UserAvatar'
 
 type ParticipantsListProps = {
-  participants: MockParticipant[]
+  participants: Participant[]
   variant?: 'list' | 'chips'
 }
 

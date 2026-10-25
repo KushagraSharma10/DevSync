@@ -1,14 +1,20 @@
 import { Link } from 'react-router-dom'
-import type { MockParticipant } from '../data/mockRoom'
+import type { Participant } from '../types/room'
 import { UserAvatar } from './UserAvatar'
 
 type RoomHeaderProps = {
   roomName: string
   roomCode: string
-  participants: MockParticipant[]
+  participants: Participant[]
+  isLive?: boolean
 }
 
-export function RoomHeader({ roomName, roomCode, participants }: RoomHeaderProps) {
+export function RoomHeader({
+  roomName,
+  roomCode,
+  participants,
+  isLive = false,
+}: RoomHeaderProps) {
   const handleCopyCode = () => {
     navigator.clipboard?.writeText(roomCode).catch(() => {
       // Clipboard unavailable — UI-only slice, ignore
@@ -57,10 +63,16 @@ export function RoomHeader({ roomName, roomCode, participants }: RoomHeaderProps
         </button>
       </span>
 
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[13px] font-medium text-emerald-400">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-        Live
-      </span>
+      {isLive ? (
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[13px] font-medium text-emerald-400">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+          Live
+        </span>
+      ) : (
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-(--border) bg-(--bg-soft) px-3 py-1 text-[13px] font-medium text-(--text-muted)">
+          Connecting…
+        </span>
+      )}
 
       <span className="ml-auto hidden shrink-0 items-center md:inline-flex">
         <span className="flex -space-x-2">

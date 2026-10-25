@@ -1,9 +1,3 @@
-export type MockParticipant = {
-  id: string
-  name: string
-  isYou?: boolean
-}
-
 export type MockChatMessage = {
   id: string
   author: string
@@ -11,12 +5,8 @@ export type MockChatMessage = {
   text: string
 }
 
+/** Chat stays mock until RT3; participants come from Socket.IO presence. */
 export const mockRoom = {
-  participants: [
-    { id: '1', name: 'Maya Chen', isYou: true },
-    { id: '2', name: 'Rohan Iyer' },
-    { id: '3', name: 'Sam Okafor' },
-  ] as MockParticipant[],
   messages: [
     {
       id: '1',
@@ -59,25 +49,11 @@ function binarySearch(nums, target) {
 
   while (lo <= hi) {
     const mid = lo + Math.floor((hi - lo) / 2);
-
     if (nums[mid] === target) return mid;
     if (nums[mid] < target) lo = mid + 1;
     else hi = mid - 1;
   }
 
   return -1;
-}
-
-// Two sum: one pass with a Map of values we have seen.
-function twoSum(nums, target) {
-  const seen = new Map();
-
-  for (let i = 0; i < nums.length; i++) {
-    const need = target - nums[i];
-    if (seen.has(need)) return [seen.get(need), i];
-    seen.set(nums[i], i);
-  }
-
-  return null;
 }
 `
