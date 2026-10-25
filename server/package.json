@@ -5,7 +5,7 @@
   "description": "DevSync",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.js",
+    "dev": "nodemon src/index.js",
     "start": "node src/index.js"
   },
   "dependencies": {
@@ -16,5 +16,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.11.2",
     "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }

@@ -12,3 +12,12 @@ export type Participant = {
   name: string
   isYou?: boolean
 }
+
+export type ChatMessage = {
+  id: string
+  text: string
+  author: string
+  authorId: string
+  createdAt: string
+  time: string
+}

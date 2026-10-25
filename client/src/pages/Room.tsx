@@ -4,7 +4,6 @@ import { ChatPanel } from '../components/ChatPanel'
 import { CodeEditor } from '../components/CodeEditor'
 import { ParticipantsList } from '../components/ParticipantsList'
 import { RoomHeader } from '../components/RoomHeader'
-import { mockRoom, type MockChatMessage } from '../data/mockRoom'
 import { useRoomSocket } from '../hooks/useRoomSocket'
 import { ApiError, roomsApi } from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
@@ -28,27 +27,33 @@ const Room = () => {
   // Local React state only — never put editor text in Zustand
   const [editorCode, setEditorCode] = useState('')
   const [cursor, setCursor] = useState({ line: 1, column: 1 })
-  const [messages, setMessages] = useState<MockChatMessage[]>(mockRoom.messages)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
 
   // When we apply a remote snapshot, Monaco may fire onChange — skip re-emit
   const applyingRemoteRef = useRef(false)
 
   const roomReady = !isLoadingRoom && !roomError
-  const { participants, isConnected, socketError, emitCodeUpdate } =
-    useRoomSocket({
-      roomCode,
-      token,
-      currentUserId: user?.id ?? null,
-      enabled: roomReady,
-      onRemoteCode: (content) => {
-        applyingRemoteRef.current = true
-        setEditorCode(content)
-        queueMicrotask(() => {
-          applyingRemoteRef.current = false
-        })
-      },
-    })
+  const {
+    participants,
+    messages,
+    connectionStatus,
+    isConnected,
+    socketError,
+    emitCodeUpdate,
+    emitChatMessage,
+  } = useRoomSocket({
+    roomCode,
+    token,
+    currentUserId: user?.id ?? null,
+    enabled: roomReady,
+    onRemoteCode: (content) => {
+      applyingRemoteRef.current = true
+      setEditorCode(content)
+      queueMicrotask(() => {
+        applyingRemoteRef.current = false
+      })
+    },
+  })
 
   const handleEditorChange = (value: string) => {
     setEditorCode(value)
@@ -97,16 +102,9 @@ const Room = () => {
     }
   }, [token, roomCode, logout])
 
-  const handleSendMessage = (text: string) => {
-    const now = new Date()
-    const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`
-    setMessages((prev) => [
-      ...prev,
-      { id: String(Date.now()), author: 'You', time, text },
-    ])
-  }
-
   const lastMessage = messages[messages.length - 1]
+  const currentUserId = user?.id ?? null
+  const chatDisabled = connectionStatus !== 'live'
 
   if (isLoadingRoom) {
     return (
@@ -138,8 +136,14 @@ const Room = () => {
         roomName={roomName}
         roomCode={roomCode}
         participants={participants}
-        isLive={isConnected}
+        connectionStatus={connectionStatus}
       />
+
+      {connectionStatus === 'reconnecting' ? (
+        <div className="border-b border-(--border) bg-(--bg-elevated) px-4 py-2 text-center text-sm text-(--text-muted)">
+          Connection lost — reconnecting…
+        </div>
+      ) : null}
 
       {socketError ? (
         <div
@@ -193,7 +197,12 @@ const Room = () => {
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col border-t border-(--border)">
-            <ChatPanel messages={messages} onSendMessage={handleSendMessage} />
+            <ChatPanel
+              messages={messages}
+              currentUserId={currentUserId}
+              onSendMessage={emitChatMessage}
+              disabled={chatDisabled}
+            />
           </div>
         </aside>
 
@@ -238,7 +247,9 @@ const Room = () => {
               <div className="flex min-h-0 flex-1 flex-col border-t border-(--border)">
                 <ChatPanel
                   messages={messages}
-                  onSendMessage={handleSendMessage}
+                  currentUserId={currentUserId}
+                  onSendMessage={emitChatMessage}
+                  disabled={chatDisabled}
                 />
               </div>
             </div>
@@ -257,7 +268,11 @@ const Room = () => {
                   </span>
                   {lastMessage ? (
                     <span className="mt-0.5 block truncate text-sm text-(--text-muted)">
-                      {lastMessage.author}: {lastMessage.text}
+                      {currentUserId &&
+                      lastMessage.authorId === currentUserId
+                        ? 'You'
+                        : lastMessage.author}
+                      : {lastMessage.text}
                     </span>
                   ) : null}
                 </span>

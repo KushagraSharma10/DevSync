@@ -1,6 +1,7 @@
 import { User } from '../models/User.js'
 import { Room } from '../models/Room.js'
 import { verifyToken } from '../utils/token.js'
+import { createMessage, listRecentMessages } from './chatService.js'
 import {
   ensureCode,
   flushPersist,
@@ -31,6 +32,7 @@ function broadcastPresence(io, roomCode) {
  * Auth: JWT in handshake.auth.token
  * RT1: room:join / leave / presence:update
  * RT2: code:update / code:request_sync / code:sync (+ savedCode debounce persist)
+ * RT3: chat:send / chat:new + recent history on join
  */
 export function registerSockets(io) {
   io.use(async (socket, next) => {
@@ -82,15 +84,17 @@ export function registerSockets(io) {
           name: socket.data.userName,
         })
         socket.data.roomCode = code
+        socket.data.roomId = room.id
 
-        // Live snapshot: memory first, else seed from Mongo savedCode
         const content = ensureCode(code, room.savedCode)
+        const messages = await listRecentMessages(room.id)
 
         broadcastPresence(io, code)
         reply({
           ok: true,
           participants: listParticipants(code),
           content,
+          messages,
         })
       } catch (error) {
         console.error('room:join failed:', error)
@@ -110,13 +114,13 @@ export function registerSockets(io) {
       removeMember(code, socket.id)
       if (socket.data.roomCode === code) {
         socket.data.roomCode = undefined
+        socket.data.roomId = undefined
       }
       broadcastPresence(io, code)
       void flushPersist(code)
       reply({ ok: true })
     })
 
-    // Last-Write-Wins: latest content overwrites; relay to everyone else in the room
     socket.on('code:update', (payload) => {
       const roomCode = socket.data.roomCode
       if (!roomCode) return
@@ -128,7 +132,6 @@ export function registerSockets(io) {
       schedulePersist(roomCode)
     })
 
-    // Late joiner / reconnect: ask server for full snapshot
     socket.on('code:request_sync', (payload, ack) => {
       const reply = typeof ack === 'function' ? ack : () => {}
       const roomCode = readCode(payload) || socket.data.roomCode
@@ -145,6 +148,36 @@ export function registerSockets(io) {
 
       reply({ ok: true, content })
       socket.emit('code:sync', { content })
+    })
+
+    socket.on('chat:send', async (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : () => {}
+      const roomCode = socket.data.roomCode
+      const roomId = socket.data.roomId
+      if (!roomCode || !roomId) {
+        reply({ ok: false, message: 'Join a room before chatting.' })
+        return
+      }
+
+      try {
+        const result = await createMessage({
+          roomId,
+          userId: socket.data.userId,
+          userName: socket.data.userName,
+          text: payload?.text,
+        })
+
+        if (result.error) {
+          reply({ ok: false, message: result.error })
+          return
+        }
+
+        io.to(roomCode).emit('chat:new', { message: result.message })
+        reply({ ok: true, message: result.message })
+      } catch (error) {
+        console.error('chat:send failed:', error)
+        reply({ ok: false, message: 'Unable to send message.' })
+      }
     })
 
     socket.on('disconnect', () => {

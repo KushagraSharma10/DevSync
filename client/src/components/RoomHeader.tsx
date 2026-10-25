@@ -6,14 +6,15 @@ type RoomHeaderProps = {
   roomName: string
   roomCode: string
   participants: Participant[]
-  isLive?: boolean
+  /** live | connecting | reconnecting */
+  connectionStatus?: 'live' | 'connecting' | 'reconnecting'
 }
 
 export function RoomHeader({
   roomName,
   roomCode,
   participants,
-  isLive = false,
+  connectionStatus = 'connecting',
 }: RoomHeaderProps) {
   const handleCopyCode = () => {
     navigator.clipboard?.writeText(roomCode).catch(() => {
@@ -63,14 +64,16 @@ export function RoomHeader({
         </button>
       </span>
 
-      {isLive ? (
+      {connectionStatus === 'live' ? (
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[13px] font-medium text-emerald-400">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
           Live
         </span>
       ) : (
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-(--border) bg-(--bg-soft) px-3 py-1 text-[13px] font-medium text-(--text-muted)">
-          Connecting…
+          {connectionStatus === 'reconnecting'
+            ? 'Reconnecting…'
+            : 'Connecting…'}
         </span>
       )}
 
