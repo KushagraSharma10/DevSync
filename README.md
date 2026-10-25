@@ -17,24 +17,37 @@ Pair with a teammate, join with a room code, and code together without juggling 
 | Layer | Stack |
 |-------|--------|
 | Frontend | React (Vite), TypeScript, Tailwind CSS, Zustand, Monaco |
-| Backend (later) | Node.js, Express, JavaScript, Socket.IO |
-| Database (later) | MongoDB (Mongoose) |
-| Auth (later) | JWT + bcrypt |
+| Backend | Node.js, Express, JavaScript, Socket.IO |
+| Database | MongoDB (Mongoose) |
+| Auth | JWT + bcrypt |
+| Hosting | Vercel (client) + Render (server) — see [DEPLOY.md](./DEPLOY.md) |
 
 ## Project structure
 ```text
 devsync/
-└── client/          # Vite React app (current focus)
+├── client/          # Vite React app
+├── server/          # Express + Socket.IO API
+├── DEPLOY.md        # Production deploy steps
+└── README.md
 ```
 
 ## Getting started
 
 ### Prerequisites
 - Node.js 18+
+- MongoDB Atlas (or local Mongo) for the server
+
+### Server
+```bash
+cd DevSync/server
+cp .env.example .env
+# fill MONGO_URI, JWT_SECRET, CLIENT_URL
+npm install
+npm run dev
+```
 
 ### Client
 ```bash
-git clone https://github.com/KushagraSharma10/DevSync.git
 cd DevSync/client
 cp .env.example .env
 npm install
@@ -47,9 +60,9 @@ VITE_API_URL=http://localhost:5000
 VITE_SOCKET_URL=http://localhost:5000
 ```
 
-Open the client URL from the terminal (usually `http://localhost:5173`).
+Example `server/.env` — see `server/.env.example`.
 
-Server will be added in a later phase.
+Open the client URL from the terminal (usually `http://localhost:5173`).
 
 ## How it works (short)
 1. Sign up / sign in
@@ -58,13 +71,16 @@ Server will be added in a later phase.
 
 **Sync model:** last-write-wins document sync for small rooms (about 2–4 people). Not full CRDT/OT yet.
 
+## Deploy
+Production steps (Atlas + Render + Vercel): **[DEPLOY.md](./DEPLOY.md)**.
+
 ## Build phases
 - [x] Phase 0 — Client setup
-- [ ] Phase 1 — Auth
-- [ ] Phase 2 — Rooms REST + dashboard
-- [ ] Phase 3 — Realtime editor + presence
-- [ ] Phase 4 — Chat + polish
-- [ ] Phase 5 — Deploy docs (when requested)
+- [x] Phase 1 — Auth
+- [x] Phase 2 — Rooms REST + dashboard
+- [x] Phase 3 — Realtime editor + presence
+- [x] Phase 4 — Chat + polish
+- [ ] Phase 5 — Deploy (follow DEPLOY.md)
 
 ## Roadmap
 - [ ] Multi-file tabs
