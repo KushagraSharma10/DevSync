@@ -1,24 +1,14 @@
 import Editor, { type BeforeMount, type OnMount } from '@monaco-editor/react'
-import {
-  forwardRef,
-  useImperativeHandle,
-  useRef,
-  type MutableRefObject,
-} from 'react'
-import { diffSpan } from '../lib/textMerge'
+import { useEffect, useState } from 'react'
+import * as Y from 'yjs'
+import { MonacoBinding } from 'y-monaco'
 import { useUiStore } from '../stores/uiStore'
 
 type MonacoStandaloneEditor = Parameters<OnMount>[0]
-
-export type CodeEditorHandle = {
-  applyRemote: (content: string) => void
-  getValue: () => string
-}
+type MonacoNamespace = Parameters<BeforeMount>[0]
 
 type CodeEditorProps = {
-  /** Seed text for first mount (room remounts with key=roomCode). */
-  initialValue?: string
-  onChange: (value: string) => void
+  ytext: Y.Text
   onCursorChange: (line: number, column: number) => void
 }
 
@@ -94,126 +84,100 @@ const handleBeforeMount: BeforeMount = (monaco) => {
   })
 }
 
-/** Apply remote text as a minimal range edit so the cursor stays put (C2). */
-function applyMinimalRemoteEdit(editor: MonacoStandaloneEditor, next: string) {
-  const model = editor.getModel()
-  if (!model) return
+export function CodeEditor({ ytext, onCursorChange }: CodeEditorProps) {
+  const theme = useUiStore((state) => state.theme)
+  const monacoTheme = theme === 'light' ? 'devsync-light' : 'devsync-dark'
+  const [editorApi, setEditorApi] = useState<{
+    editor: MonacoStandaloneEditor
+    monaco: MonacoNamespace
+  } | null>(null)
 
-  const prev = model.getValue()
-  if (prev === next) return
+  // Bind Yjs ↔ Monaco when both the model and Y.Text are ready (M1 undo).
+  useEffect(() => {
+    if (!editorApi) return
+    const { editor, monaco } = editorApi
+    const model = editor.getModel()
+    if (!model) return
 
-  const { start, end, text } = diffSpan(prev, next)
-  const startPos = model.getPositionAt(start)
-  const endPos = model.getPositionAt(end)
-
-  // Let Monaco adjust markers/cursors for the edit — do not force full replace.
-  editor.executeEdits('devsync-remote', [
-    {
-      range: {
-        startLineNumber: startPos.lineNumber,
-        startColumn: startPos.column,
-        endLineNumber: endPos.lineNumber,
-        endColumn: endPos.column,
-      },
-      text,
-      forceMoveMarkers: true,
-    },
-  ])
-}
-
-export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(
-  function CodeEditor(
-    { initialValue = '', onChange, onCursorChange },
-    ref,
-  ) {
-    const theme = useUiStore((state) => state.theme)
-    const monacoTheme = theme === 'light' ? 'devsync-light' : 'devsync-dark'
-    const editorRef = useRef<MonacoStandaloneEditor | null>(null)
-    const applyingRemoteRef = useRef(false)
-    const pendingRemoteRef: MutableRefObject<string | null> = useRef(null)
-
-    useImperativeHandle(ref, () => ({
-      applyRemote(content: string) {
-        const editor = editorRef.current
-        if (!editor) {
-          pendingRemoteRef.current = content
-          return
-        }
-        applyingRemoteRef.current = true
-        applyMinimalRemoteEdit(editor, content)
-        queueMicrotask(() => {
-          applyingRemoteRef.current = false
-        })
-      },
-      getValue() {
-        return editorRef.current?.getModel()?.getValue() ?? initialValue
-      },
-    }))
-
-    const handleMount: OnMount = (editor) => {
-      editorRef.current = editor
-      editor.setPosition({ lineNumber: 1, column: 1 })
-      editor.focus()
-      onCursorChange(1, 1)
-
-      editor.onDidChangeCursorPosition((event) => {
-        onCursorChange(event.position.lineNumber, event.position.column)
-      })
-
-      if (pendingRemoteRef.current !== null) {
-        const pending = pendingRemoteRef.current
-        pendingRemoteRef.current = null
-        applyingRemoteRef.current = true
-        applyMinimalRemoteEdit(editor, pending)
-        queueMicrotask(() => {
-          applyingRemoteRef.current = false
-        })
-      }
-    }
-
-    return (
-      <Editor
-        height="100%"
-        language="javascript"
-        theme={monacoTheme}
-        defaultValue={initialValue}
-        beforeMount={handleBeforeMount}
-        onMount={handleMount}
-        onChange={(next) => {
-          if (applyingRemoteRef.current) return
-          onChange(next ?? '')
-        }}
-        loading={
-          <div className="flex h-full items-center justify-center bg-(--bg) text-sm text-(--text-muted)">
-            Loading editor…
-          </div>
-        }
-        options={{
-          minimap: { enabled: false },
-          fontSize: 15,
-          lineHeight: 1.65,
-          fontFamily:
-            "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-          padding: { top: 16, bottom: 16 },
-          scrollBeyondLastLine: false,
-          automaticLayout: true,
-          renderLineHighlight: 'line',
-          folding: false,
-          lineNumbersMinChars: 4,
-          lineDecorationsWidth: 16,
-          hideCursorInOverviewRuler: true,
-          overviewRulerBorder: false,
-          overviewRulerLanes: 0,
-          guides: { indentation: false, bracketPairs: false },
-          bracketPairColorization: { enabled: false },
-          matchBrackets: 'near',
-          selectionHighlight: true,
-          occurrencesHighlight: 'off',
-          smoothScrolling: true,
-          cursorBlinking: 'smooth',
-          scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
-        }}
-      />
+    const binding = new MonacoBinding(
+      ytext,
+      model,
+      new Set([editor]),
+      null,
     )
-  },
-)
+    const undoManager = new Y.UndoManager(ytext, {
+      trackedOrigins: new Set([binding]),
+      captureTimeout: 500,
+    })
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, () => {
+      undoManager.undo()
+    })
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyZ,
+      () => {
+        undoManager.redo()
+      },
+    )
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY, () => {
+      undoManager.redo()
+    })
+
+    return () => {
+      undoManager.destroy()
+      binding.destroy()
+    }
+  }, [ytext, editorApi])
+
+  const handleMount: OnMount = (editor, monaco) => {
+    setEditorApi({ editor, monaco })
+    editor.setPosition({ lineNumber: 1, column: 1 })
+    editor.focus()
+    onCursorChange(1, 1)
+
+    editor.onDidChangeCursorPosition((event) => {
+      onCursorChange(event.position.lineNumber, event.position.column)
+    })
+  }
+
+  return (
+    <Editor
+      height="100%"
+      language="javascript"
+      theme={monacoTheme}
+      defaultValue=""
+      beforeMount={handleBeforeMount}
+      onMount={handleMount}
+      loading={
+        <div className="flex h-full items-center justify-center bg-(--bg) text-sm text-(--text-muted)">
+          Loading editor…
+        </div>
+      }
+      options={{
+        minimap: { enabled: false },
+        fontSize: 15,
+        lineHeight: 1.65,
+        fontFamily:
+          "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        padding: { top: 16, bottom: 16 },
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        renderLineHighlight: 'line',
+        folding: false,
+        lineNumbersMinChars: 4,
+        lineDecorationsWidth: 16,
+        hideCursorInOverviewRuler: true,
+        overviewRulerBorder: false,
+        overviewRulerLanes: 0,
+        guides: { indentation: false, bracketPairs: false },
+        bracketPairColorization: { enabled: false },
+        matchBrackets: 'near',
+        selectionHighlight: true,
+        occurrencesHighlight: 'off',
+        smoothScrolling: true,
+        cursorBlinking: 'smooth',
+        scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+      }}
+    />
+  )
+}

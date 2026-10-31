@@ -3,12 +3,14 @@ import { Room } from '../models/Room.js'
 import { verifyToken } from '../utils/token.js'
 import { createMessage, listRecentMessages } from './chatService.js'
 import {
-  ensureCode,
+  applyClientUpdate,
+  encodeFullState,
+  ensureDoc,
   flushPersist,
-  getSnapshot,
   schedulePersist,
-  trySetCode,
-} from './codeStore.js'
+  syncStep,
+  u8ToB64,
+} from './yjsStore.js'
 import {
   addMember,
   listParticipants,
@@ -31,7 +33,7 @@ function broadcastPresence(io, roomCode) {
  * Attach Socket.IO handlers.
  * Auth: JWT in handshake.auth.token
  * RT1: room:join / leave / presence:update
- * RT2: code:update / code:request_sync / code:sync (+ savedCode debounce persist)
+ * RT2: yjs:sync / yjs:update (+ savedCode debounce persist)
  * RT3: chat:send / chat:new + recent history on join
  */
 export function registerSockets(io) {
@@ -86,15 +88,15 @@ export function registerSockets(io) {
         socket.data.roomCode = code
         socket.data.roomId = room.id
 
-        const snapshot = ensureCode(code, room.savedCode)
+        ensureDoc(code, room.savedCode)
+        const yjsState = encodeFullState(code)
         const messages = await listRecentMessages(room.id)
 
         broadcastPresence(io, code)
         reply({
           ok: true,
           participants: listParticipants(code),
-          content: snapshot.content,
-          rev: snapshot.rev,
+          yjsState: yjsState ? u8ToB64(yjsState) : null,
           messages,
         })
       } catch (error) {
@@ -122,7 +124,7 @@ export function registerSockets(io) {
       reply({ ok: true })
     })
 
-    socket.on('code:update', (payload, ack) => {
+    socket.on('yjs:sync', (payload, ack) => {
       const reply = typeof ack === 'function' ? ack : () => {}
       const roomCode = socket.data.roomCode
       if (!roomCode) {
@@ -130,48 +132,23 @@ export function registerSockets(io) {
         return
       }
 
-      const baseRev =
-        typeof payload?.baseRev === 'number' ? payload.baseRev : undefined
-      const result = trySetCode(roomCode, payload?.content, baseRev)
-
+      const result = syncStep(roomCode, payload?.stateVector)
       if (!result.ok) {
-        reply({
-          ok: false,
-          message: result.error === 'stale' ? 'Stale revision.' : 'Invalid code update.',
-          content: result.content,
-          rev: result.rev,
-          error: result.error,
-        })
+        reply({ ok: false, message: 'No document for this room.' })
         return
       }
-
-      socket.to(roomCode).emit('code:update', {
-        content: result.content,
-        rev: result.rev,
-      })
-      schedulePersist(roomCode)
-      reply({ ok: true, content: result.content, rev: result.rev })
+      reply(result)
     })
 
-    socket.on('code:request_sync', (payload, ack) => {
-      const reply = typeof ack === 'function' ? ack : () => {}
-      const roomCode = readCode(payload) || socket.data.roomCode
-      if (!roomCode) {
-        reply({ ok: false, message: 'Not in a room.' })
-        return
-      }
+    socket.on('yjs:update', (payload) => {
+      const roomCode = socket.data.roomCode
+      if (!roomCode) return
 
-      const snapshot = getSnapshot(roomCode)
-      if (!snapshot) {
-        reply({ ok: false, message: 'No code snapshot yet.' })
-        return
-      }
+      const result = applyClientUpdate(roomCode, payload?.update)
+      if (!result.ok) return
 
-      reply({ ok: true, content: snapshot.content, rev: snapshot.rev })
-      socket.emit('code:sync', {
-        content: snapshot.content,
-        rev: snapshot.rev,
-      })
+      socket.to(roomCode).emit('yjs:update', { update: result.update })
+      schedulePersist(roomCode)
     })
 
     socket.on('chat:send', async (payload, ack) => {
