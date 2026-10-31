@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import * as Y from 'yjs'
 import { getSocket, disconnectSocket } from '../lib/socket'
-import { threeWayMerge } from '../lib/textMerge'
+import { b64ToU8, u8ToB64 } from '../lib/yjsBinary'
 import type { ChatMessage, Participant } from '../types/room'
 
 type PresencePayload = {
   participants: Array<{ id: string; name: string }>
-}
-
-type CodePayload = {
-  content: string
-  rev?: number
 }
 
 type ChatNewPayload = {
@@ -20,24 +16,15 @@ type JoinAck = {
   ok: boolean
   message?: string
   participants?: Array<{ id: string; name: string }>
-  content?: string
-  rev?: number
+  yjsState?: string | null
   messages?: ChatMessage[]
 }
 
-type SyncAck = {
+type YjsSyncAck = {
   ok: boolean
   message?: string
-  content?: string
-  rev?: number
-}
-
-type CodeUpdateAck = {
-  ok: boolean
-  message?: string
-  content?: string
-  rev?: number
-  error?: string
+  update?: string
+  stateVector?: string
 }
 
 type ChatSendAck = {
@@ -50,18 +37,14 @@ type UseRoomSocketOptions = {
   token: string | null
   currentUserId: string | null
   enabled: boolean
-  /** Current editor text — used to 3-way-merge remote updates (C1). */
-  getLocalContent: () => string
-  onRemoteCode?: (content: string) => void
 }
 
 export type ConnectionStatus = 'connecting' | 'live' | 'reconnecting'
 
-const CODE_EMIT_DEBOUNCE_MS = 80
+const YTEXT_KEY = 'monaco'
 
 /** Map Socket.IO internals (xhr poll error, etc.) to plain language. */
 function friendlyConnectError(error: Error, isReconnect: boolean): string {
-  // Reconnecting banner already explains the situation — skip a second technical alert
   if (isReconnect) return ''
 
   const raw = (error.message || '').toLowerCase()
@@ -96,42 +79,26 @@ function withYouFlag(
 }
 
 /**
- * Room socket: presence (RT1) + code sync (RT2) + chat (RT3).
- * Editor text stays in the page — this hook only pipes socket events.
+ * Room socket: presence + Yjs code sync + chat.
+ * Keeps one Y.Doc for the room lifetime so offline edits survive reconnect (M2).
  */
 export function useRoomSocket({
   roomCode,
   token,
   currentUserId,
   enabled,
-  getLocalContent,
-  onRemoteCode,
 }: UseRoomSocketOptions) {
   const [participants, setParticipants] = useState<Participant[]>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>('connecting')
   const [socketError, setSocketError] = useState('')
+  const [ytext, setYtext] = useState<Y.Text | null>(null)
 
-  const onRemoteCodeRef = useRef(onRemoteCode)
-  const getLocalContentRef = useRef(getLocalContent)
-  const emitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null)
   const hadConnectedRef = useRef(false)
-  /** Last server-authoritative snapshot we accepted. */
-  const syncedRef = useRef<{ content: string; rev: number }>({
-    content: '',
-    rev: 0,
-  })
-  const emitCodeUpdateRef = useRef<(content: string) => void>(() => {})
-
-  useEffect(() => {
-    onRemoteCodeRef.current = onRemoteCode
-  }, [onRemoteCode])
-
-  useEffect(() => {
-    getLocalContentRef.current = getLocalContent
-  }, [getLocalContent])
+  const ydocRef = useRef<Y.Doc | null>(null)
+  const syncedOnceRef = useRef(false)
 
   useEffect(() => {
     if (!enabled || !token || !roomCode) {
@@ -142,33 +109,48 @@ export function useRoomSocket({
     socketRef.current = socket
     let cancelled = false
     hadConnectedRef.current = false
-    syncedRef.current = { content: '', rev: 0 }
+    syncedOnceRef.current = false
 
-    // Defer reset so we don't sync-setState in the effect body (eslint)
+    const ydoc = new Y.Doc()
+    const text = ydoc.getText(YTEXT_KEY)
+    ydocRef.current = ydoc
+    setYtext(text)
+
+    const onLocalUpdate = (update: Uint8Array, origin: unknown) => {
+      if (origin === 'remote' || origin === 'load') return
+      if (!socket.connected) return
+      socket.emit('yjs:update', { update: u8ToB64(update) })
+    }
+    ydoc.on('update', onLocalUpdate)
+
     const resetTimer = setTimeout(() => {
       if (cancelled) return
       setConnectionStatus('connecting')
       setMessages([])
     }, 0)
 
-    function ingestRemote(content: string, rev: number) {
-      if (rev < syncedRef.current.rev) return
-      // Same rev + same text: ignore. Same rev shouldn't rewrite with different text.
-      if (rev === syncedRef.current.rev && content === syncedRef.current.content) {
-        return
-      }
+    function applyRemoteUpdate(b64: string) {
+      const bytes = b64ToU8(b64)
+      Y.applyUpdate(ydoc, bytes, 'remote')
+    }
 
-      const base = syncedRef.current.content
-      const local = getLocalContentRef.current()
-      const merged = threeWayMerge(base, local, content)
-
-      syncedRef.current = { content, rev }
-      onRemoteCodeRef.current?.(merged)
-
-      // Local-only edits remain after merge — push them on top of the new rev.
-      if (merged !== content) {
-        emitCodeUpdateRef.current(merged)
-      }
+    function runVectorSync() {
+      socket.emit(
+        'yjs:sync',
+        { stateVector: u8ToB64(Y.encodeStateVector(ydoc)) },
+        (ack: YjsSyncAck) => {
+          if (cancelled || !ack?.ok) return
+          if (typeof ack.update === 'string' && ack.update.length > 0) {
+            applyRemoteUpdate(ack.update)
+          }
+          if (typeof ack.stateVector === 'string') {
+            const missing = Y.encodeStateAsUpdate(ydoc, b64ToU8(ack.stateVector))
+            if (missing.byteLength > 2 && socket.connected) {
+              socket.emit('yjs:update', { update: u8ToB64(missing) })
+            }
+          }
+        },
+      )
     }
 
     function handlePresence(payload: PresencePayload) {
@@ -176,18 +158,10 @@ export function useRoomSocket({
       setParticipants(withYouFlag(payload.participants ?? [], currentUserId))
     }
 
-    function handleCodeUpdate(payload: CodePayload) {
+    function handleYjsUpdate(payload: { update?: string }) {
       if (cancelled) return
-      if (typeof payload?.content !== 'string') return
-      const rev = typeof payload.rev === 'number' ? payload.rev : syncedRef.current.rev + 1
-      ingestRemote(payload.content, rev)
-    }
-
-    function handleCodeSync(payload: CodePayload) {
-      if (cancelled) return
-      if (typeof payload?.content !== 'string') return
-      const rev = typeof payload.rev === 'number' ? payload.rev : syncedRef.current.rev
-      ingestRemote(payload.content, rev)
+      if (typeof payload?.update !== 'string' || !payload.update) return
+      applyRemoteUpdate(payload.update)
     }
 
     function handleChatNew(payload: ChatNewPayload) {
@@ -220,24 +194,14 @@ export function useRoomSocket({
         setParticipants(withYouFlag(ack.participants ?? [], currentUserId))
         setMessages(Array.isArray(ack.messages) ? ack.messages : [])
 
-        if (typeof ack.content === 'string') {
-          const rev = typeof ack.rev === 'number' ? ack.rev : 0
-          // Join/resync: treat server copy as base (overwrite local seed).
-          syncedRef.current = { content: ack.content, rev }
-          onRemoteCodeRef.current?.(ack.content)
+        if (!syncedOnceRef.current) {
+          if (typeof ack.yjsState === 'string' && ack.yjsState.length > 0) {
+            applyRemoteUpdate(ack.yjsState)
+          }
+          syncedOnceRef.current = true
         } else {
-          socket.emit(
-            'code:request_sync',
-            { code: roomCode },
-            (syncAck: SyncAck) => {
-              if (cancelled) return
-              if (syncAck?.ok && typeof syncAck.content === 'string') {
-                const rev = typeof syncAck.rev === 'number' ? syncAck.rev : 0
-                syncedRef.current = { content: syncAck.content, rev }
-                onRemoteCodeRef.current?.(syncAck.content)
-              }
-            },
-          )
+          // Reconnect: merge offline local edits with server (M2)
+          runVectorSync()
         }
       })
     }
@@ -246,7 +210,7 @@ export function useRoomSocket({
       if (cancelled) return
       if (hadConnectedRef.current) {
         setConnectionStatus('reconnecting')
-        setSocketError('') // soft banner only — no tech jargon
+        setSocketError('')
       } else {
         setConnectionStatus('connecting')
       }
@@ -260,8 +224,7 @@ export function useRoomSocket({
     }
 
     socket.on('presence:update', handlePresence)
-    socket.on('code:update', handleCodeUpdate)
-    socket.on('code:sync', handleCodeSync)
+    socket.on('yjs:update', handleYjsUpdate)
     socket.on('chat:new', handleChatNew)
     socket.on('connect', handleConnect)
     socket.on('disconnect', handleDisconnect)
@@ -276,13 +239,13 @@ export function useRoomSocket({
     return () => {
       cancelled = true
       clearTimeout(resetTimer)
-      if (emitTimerRef.current) {
-        clearTimeout(emitTimerRef.current)
-        emitTimerRef.current = null
-      }
+      ydoc.off('update', onLocalUpdate)
+      ydoc.destroy()
+      ydocRef.current = null
+      setYtext(null)
+
       socket.off('presence:update', handlePresence)
-      socket.off('code:update', handleCodeUpdate)
-      socket.off('code:sync', handleCodeSync)
+      socket.off('yjs:update', handleYjsUpdate)
       socket.off('chat:new', handleChatNew)
       socket.off('connect', handleConnect)
       socket.off('disconnect', handleDisconnect)
@@ -296,53 +259,6 @@ export function useRoomSocket({
     }
   }, [enabled, token, roomCode, currentUserId])
 
-  function emitCodeUpdate(content: string) {
-    if (emitTimerRef.current) clearTimeout(emitTimerRef.current)
-    emitTimerRef.current = setTimeout(() => {
-      emitTimerRef.current = null
-      const socket = socketRef.current
-      if (!socket?.connected) return
-
-      const baseRev = syncedRef.current.rev
-      socket.emit(
-        'code:update',
-        { content, baseRev },
-        (ack: CodeUpdateAck) => {
-          if (!ack) return
-
-          if (ack.ok && typeof ack.rev === 'number') {
-            syncedRef.current = {
-              content: typeof ack.content === 'string' ? ack.content : content,
-              rev: ack.rev,
-            }
-            const local = getLocalContentRef.current()
-            if (local !== syncedRef.current.content) {
-              emitCodeUpdate(local)
-            }
-            return
-          }
-
-          // Stale or rejected — merge server copy and retry if we still differ.
-          if (
-            typeof ack.content === 'string' &&
-            typeof ack.rev === 'number'
-          ) {
-            const base = syncedRef.current.content
-            const local = getLocalContentRef.current()
-            const merged = threeWayMerge(base, local, ack.content)
-            syncedRef.current = { content: ack.content, rev: ack.rev }
-            onRemoteCodeRef.current?.(merged)
-            if (merged !== ack.content) {
-              emitCodeUpdate(merged)
-            }
-          }
-        },
-      )
-    }, CODE_EMIT_DEBOUNCE_MS)
-  }
-
-  emitCodeUpdateRef.current = emitCodeUpdate
-
   function emitChatMessage(text: string) {
     const socket = socketRef.current
     if (!socket?.connected) return
@@ -355,7 +271,6 @@ export function useRoomSocket({
             : 'Unable to send message.',
         )
       }
-      // Successful send arrives via chat:new (including to sender) — no local duplicate
     })
   }
 
@@ -365,7 +280,7 @@ export function useRoomSocket({
     connectionStatus,
     isConnected: connectionStatus === 'live',
     socketError,
-    emitCodeUpdate,
+    ytext,
     emitChatMessage,
   }
 }
