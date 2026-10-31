@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getSocket, disconnectSocket } from '../lib/socket'
+import { threeWayMerge } from '../lib/textMerge'
 import type { ChatMessage, Participant } from '../types/room'
 
 type PresencePayload = {
@@ -8,6 +9,7 @@ type PresencePayload = {
 
 type CodePayload = {
   content: string
+  rev?: number
 }
 
 type ChatNewPayload = {
@@ -19,6 +21,7 @@ type JoinAck = {
   message?: string
   participants?: Array<{ id: string; name: string }>
   content?: string
+  rev?: number
   messages?: ChatMessage[]
 }
 
@@ -26,6 +29,15 @@ type SyncAck = {
   ok: boolean
   message?: string
   content?: string
+  rev?: number
+}
+
+type CodeUpdateAck = {
+  ok: boolean
+  message?: string
+  content?: string
+  rev?: number
+  error?: string
 }
 
 type ChatSendAck = {
@@ -38,6 +50,8 @@ type UseRoomSocketOptions = {
   token: string | null
   currentUserId: string | null
   enabled: boolean
+  /** Current editor text — used to 3-way-merge remote updates (C1). */
+  getLocalContent: () => string
   onRemoteCode?: (content: string) => void
 }
 
@@ -90,6 +104,7 @@ export function useRoomSocket({
   token,
   currentUserId,
   enabled,
+  getLocalContent,
   onRemoteCode,
 }: UseRoomSocketOptions) {
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -99,13 +114,24 @@ export function useRoomSocket({
   const [socketError, setSocketError] = useState('')
 
   const onRemoteCodeRef = useRef(onRemoteCode)
+  const getLocalContentRef = useRef(getLocalContent)
   const emitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const socketRef = useRef<ReturnType<typeof getSocket> | null>(null)
   const hadConnectedRef = useRef(false)
+  /** Last server-authoritative snapshot we accepted. */
+  const syncedRef = useRef<{ content: string; rev: number }>({
+    content: '',
+    rev: 0,
+  })
+  const emitCodeUpdateRef = useRef<(content: string) => void>(() => {})
 
   useEffect(() => {
     onRemoteCodeRef.current = onRemoteCode
   }, [onRemoteCode])
+
+  useEffect(() => {
+    getLocalContentRef.current = getLocalContent
+  }, [getLocalContent])
 
   useEffect(() => {
     if (!enabled || !token || !roomCode) {
@@ -116,6 +142,7 @@ export function useRoomSocket({
     socketRef.current = socket
     let cancelled = false
     hadConnectedRef.current = false
+    syncedRef.current = { content: '', rev: 0 }
 
     // Defer reset so we don't sync-setState in the effect body (eslint)
     const resetTimer = setTimeout(() => {
@@ -124,8 +151,24 @@ export function useRoomSocket({
       setMessages([])
     }, 0)
 
-    function applyRemote(content: string) {
-      onRemoteCodeRef.current?.(content)
+    function ingestRemote(content: string, rev: number) {
+      if (rev < syncedRef.current.rev) return
+      // Same rev + same text: ignore. Same rev shouldn't rewrite with different text.
+      if (rev === syncedRef.current.rev && content === syncedRef.current.content) {
+        return
+      }
+
+      const base = syncedRef.current.content
+      const local = getLocalContentRef.current()
+      const merged = threeWayMerge(base, local, content)
+
+      syncedRef.current = { content, rev }
+      onRemoteCodeRef.current?.(merged)
+
+      // Local-only edits remain after merge — push them on top of the new rev.
+      if (merged !== content) {
+        emitCodeUpdateRef.current(merged)
+      }
     }
 
     function handlePresence(payload: PresencePayload) {
@@ -136,13 +179,15 @@ export function useRoomSocket({
     function handleCodeUpdate(payload: CodePayload) {
       if (cancelled) return
       if (typeof payload?.content !== 'string') return
-      applyRemote(payload.content)
+      const rev = typeof payload.rev === 'number' ? payload.rev : syncedRef.current.rev + 1
+      ingestRemote(payload.content, rev)
     }
 
     function handleCodeSync(payload: CodePayload) {
       if (cancelled) return
       if (typeof payload?.content !== 'string') return
-      applyRemote(payload.content)
+      const rev = typeof payload.rev === 'number' ? payload.rev : syncedRef.current.rev
+      ingestRemote(payload.content, rev)
     }
 
     function handleChatNew(payload: ChatNewPayload) {
@@ -176,7 +221,10 @@ export function useRoomSocket({
         setMessages(Array.isArray(ack.messages) ? ack.messages : [])
 
         if (typeof ack.content === 'string') {
-          applyRemote(ack.content)
+          const rev = typeof ack.rev === 'number' ? ack.rev : 0
+          // Join/resync: treat server copy as base (overwrite local seed).
+          syncedRef.current = { content: ack.content, rev }
+          onRemoteCodeRef.current?.(ack.content)
         } else {
           socket.emit(
             'code:request_sync',
@@ -184,7 +232,9 @@ export function useRoomSocket({
             (syncAck: SyncAck) => {
               if (cancelled) return
               if (syncAck?.ok && typeof syncAck.content === 'string') {
-                applyRemote(syncAck.content)
+                const rev = typeof syncAck.rev === 'number' ? syncAck.rev : 0
+                syncedRef.current = { content: syncAck.content, rev }
+                onRemoteCodeRef.current?.(syncAck.content)
               }
             },
           )
@@ -252,9 +302,46 @@ export function useRoomSocket({
       emitTimerRef.current = null
       const socket = socketRef.current
       if (!socket?.connected) return
-      socket.emit('code:update', { content })
+
+      const baseRev = syncedRef.current.rev
+      socket.emit(
+        'code:update',
+        { content, baseRev },
+        (ack: CodeUpdateAck) => {
+          if (!ack) return
+
+          if (ack.ok && typeof ack.rev === 'number') {
+            syncedRef.current = {
+              content: typeof ack.content === 'string' ? ack.content : content,
+              rev: ack.rev,
+            }
+            const local = getLocalContentRef.current()
+            if (local !== syncedRef.current.content) {
+              emitCodeUpdate(local)
+            }
+            return
+          }
+
+          // Stale or rejected — merge server copy and retry if we still differ.
+          if (
+            typeof ack.content === 'string' &&
+            typeof ack.rev === 'number'
+          ) {
+            const base = syncedRef.current.content
+            const local = getLocalContentRef.current()
+            const merged = threeWayMerge(base, local, ack.content)
+            syncedRef.current = { content: ack.content, rev: ack.rev }
+            onRemoteCodeRef.current?.(merged)
+            if (merged !== ack.content) {
+              emitCodeUpdate(merged)
+            }
+          }
+        },
+      )
     }, CODE_EMIT_DEBOUNCE_MS)
   }
+
+  emitCodeUpdateRef.current = emitCodeUpdate
 
   function emitChatMessage(text: string) {
     const socket = socketRef.current

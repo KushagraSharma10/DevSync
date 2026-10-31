@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ChatPanel } from '../components/ChatPanel'
-import { CodeEditor } from '../components/CodeEditor'
+import {
+  CodeEditor,
+  type CodeEditorHandle,
+} from '../components/CodeEditor'
 import { ParticipantsList } from '../components/ParticipantsList'
 import { RoomHeader } from '../components/RoomHeader'
 import { useRoomSocket } from '../hooks/useRoomSocket'
@@ -24,13 +27,18 @@ const Room = () => {
     roomCode ? '' : 'Room code is missing.',
   )
 
-  // Local React state only — never put editor text in Zustand
-  const [editorCode, setEditorCode] = useState('')
+  // Seed for Monaco defaultValue; live text lives in the editor model.
+  const [editorSeed, setEditorSeed] = useState('')
   const [cursor, setCursor] = useState({ line: 1, column: 1 })
   const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const editorRef = useRef<CodeEditorHandle>(null)
+  const editorSeedRef = useRef(editorSeed)
+  editorSeedRef.current = editorSeed
 
-  // When we apply a remote snapshot, Monaco may fire onChange — skip re-emit
-  const applyingRemoteRef = useRef(false)
+  const getLocalContent = useCallback(
+    () => editorRef.current?.getValue() ?? editorSeedRef.current,
+    [],
+  )
 
   const roomReady = !isLoadingRoom && !roomError
   const {
@@ -46,20 +54,16 @@ const Room = () => {
     token,
     currentUserId: user?.id ?? null,
     enabled: roomReady,
+    getLocalContent,
     onRemoteCode: (content) => {
-      applyingRemoteRef.current = true
-      setEditorCode(content)
-      queueMicrotask(() => {
-        applyingRemoteRef.current = false
-      })
+      editorRef.current?.applyRemote(content)
+      setEditorSeed(content)
     },
   })
 
   const handleEditorChange = (value: string) => {
-    setEditorCode(value)
-    if (!applyingRemoteRef.current) {
-      emitCodeUpdate(value)
-    }
+    setEditorSeed(value)
+    emitCodeUpdate(value)
   }
 
   useEffect(() => {
@@ -78,7 +82,7 @@ const Room = () => {
         setRoomName(room.name)
         // REST seed; socket join ack may overwrite with newer in-memory snapshot
         if (typeof room.savedCode === 'string') {
-          setEditorCode(room.savedCode)
+          setEditorSeed(room.savedCode)
         }
       } catch (error) {
         if (cancelled) return
@@ -159,7 +163,9 @@ const Room = () => {
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--bg)">
           <div className="relative min-h-0 flex-1 overflow-hidden">
             <CodeEditor
-              value={editorCode}
+              key={roomCode}
+              ref={editorRef}
+              initialValue={editorSeed}
               onChange={handleEditorChange}
               onCursorChange={(line, column) => setCursor({ line, column })}
             />
