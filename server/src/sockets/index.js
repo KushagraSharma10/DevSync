@@ -5,9 +5,9 @@ import { createMessage, listRecentMessages } from './chatService.js'
 import {
   ensureCode,
   flushPersist,
-  getCode,
+  getSnapshot,
   schedulePersist,
-  setCode,
+  trySetCode,
 } from './codeStore.js'
 import {
   addMember,
@@ -86,14 +86,15 @@ export function registerSockets(io) {
         socket.data.roomCode = code
         socket.data.roomId = room.id
 
-        const content = ensureCode(code, room.savedCode)
+        const snapshot = ensureCode(code, room.savedCode)
         const messages = await listRecentMessages(room.id)
 
         broadcastPresence(io, code)
         reply({
           ok: true,
           participants: listParticipants(code),
-          content,
+          content: snapshot.content,
+          rev: snapshot.rev,
           messages,
         })
       } catch (error) {
@@ -121,15 +122,35 @@ export function registerSockets(io) {
       reply({ ok: true })
     })
 
-    socket.on('code:update', (payload) => {
+    socket.on('code:update', (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : () => {}
       const roomCode = socket.data.roomCode
-      if (!roomCode) return
+      if (!roomCode) {
+        reply({ ok: false, message: 'Not in a room.' })
+        return
+      }
 
-      const next = setCode(roomCode, payload?.content)
-      if (next === null) return
+      const baseRev =
+        typeof payload?.baseRev === 'number' ? payload.baseRev : undefined
+      const result = trySetCode(roomCode, payload?.content, baseRev)
 
-      socket.to(roomCode).emit('code:update', { content: next })
+      if (!result.ok) {
+        reply({
+          ok: false,
+          message: result.error === 'stale' ? 'Stale revision.' : 'Invalid code update.',
+          content: result.content,
+          rev: result.rev,
+          error: result.error,
+        })
+        return
+      }
+
+      socket.to(roomCode).emit('code:update', {
+        content: result.content,
+        rev: result.rev,
+      })
       schedulePersist(roomCode)
+      reply({ ok: true, content: result.content, rev: result.rev })
     })
 
     socket.on('code:request_sync', (payload, ack) => {
@@ -140,14 +161,17 @@ export function registerSockets(io) {
         return
       }
 
-      const content = getCode(roomCode)
-      if (content === null) {
+      const snapshot = getSnapshot(roomCode)
+      if (!snapshot) {
         reply({ ok: false, message: 'No code snapshot yet.' })
         return
       }
 
-      reply({ ok: true, content })
-      socket.emit('code:sync', { content })
+      reply({ ok: true, content: snapshot.content, rev: snapshot.rev })
+      socket.emit('code:sync', {
+        content: snapshot.content,
+        rev: snapshot.rev,
+      })
     })
 
     socket.on('chat:send', async (payload, ack) => {
